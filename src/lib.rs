@@ -790,12 +790,11 @@ mod tests {
                 }
                 true_success
             } else {
+                let mut should_have_failed = false;
                 for $failure_byte in $input {
-                    if $validate_negative {
-                        return true
-                    }
+                    should_have_failed |= $validate_negative
                 }
-                false
+                should_have_failed
             }
         };
     }
