@@ -1,4 +1,4 @@
-use swift_check::{any, arch::load, eq, ensure, range, find, for_all_ensure, search, for_all_ensure_ct};
+use swift_check::{any, arch::load, eq, ensure, range, find, for_all_ensure, search, for_all_ensure_ct, one_of};
 use criterion::{Criterion, Throughput, criterion_group, criterion_main, black_box};
 use swift_check::not;
 
@@ -204,6 +204,15 @@ fn bench_massive(c: &mut Criterion) {
         b.iter(|| {
             let res = search(black_box(&input), eq(1));
             black_box(res);
+        })
+    });
+
+    g.bench_function("one-of-4-ensure-ct", |b| {
+        b.iter(|| {
+            let res = for_all_ensure_ct(black_box(&input), one_of!(
+                eq(0), eq(1), eq(2), eq(3)
+            ));
+            assert!(res);
         })
     });
 }

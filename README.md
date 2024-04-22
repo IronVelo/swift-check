@@ -14,7 +14,7 @@ Add Swift Check to your project by including it in your Cargo.toml:
 
 ```toml
 [dependencies]
-swift-check = "0.1.0"
+swift-check = "0.1.1"
 ```
 
 ### Quick Start

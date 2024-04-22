@@ -8,11 +8,7 @@
 //!
 //! let cond = all!(
 //!     all!(any!(range!(b'a'..=b'z'), range!(b'A'..=b'Z'), eq(b' ')), not(range!(b'0'..=b'9'))),
-//!     one_of!(
-//!         space: eq(b' '),
-//!         lowercase: range!(b'a'..=b'z'),
-//!         make_lowercase_fail: range!(b'a'..=b'z')
-//!     )
+//!     one_of!(eq(b' '), range!(b'a'..=b'z'), range!(b'a'..=b'z'))
 //! );
 //!
 //! let Some(first_space) = search(input, cond) else {
@@ -618,11 +614,32 @@ macro_rules! __xor {
     };
 }
 
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __one_of {
+    ($l_i:ident: $left:expr, $r_i:ident: $right:expr, $($rest:ident: $cond:expr),* $(,)?) => {
+        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
+            // I had tried from the obvious shift conds into place and compute the
+            // hamming weight, perf degraded and less flexible. May be worth revisiting in the
+            // future. Yes, this approach is flawed and does not scale to large numbers of args
+            #[allow(unused_unsafe)]
+            unsafe {
+                let ($l_i, $r_i, $($rest),+) = ($left(data), $right(data), $($cond(data)),+);
+                // combine xor and nand to ensure only one cond held
+                $crate::arch::and(
+                    $crate::__xor!($l_i, $r_i, $($rest),+),
+                    $crate::arch::not($crate::__all!($l_i, $r_i, $($rest),+))
+                )
+            }
+        }
+    };
+}
+
 /// Ensure only one of the conditions are true
 ///
 /// # Arguments
 ///
-/// * `cond_name`: `condition`, ... - The conditions to check, only allowing one to hold
+/// * `condition`, ... - The conditions to check, only allowing one to hold (up to 4)
 ///
 /// # Example
 ///
@@ -631,52 +648,32 @@ macro_rules! __xor {
 ///
 /// let input = b"123456789";
 /// let char_or_num = for_all_ensure(
-///     input, one_of!(f: range!(b'0'..=b'9'), s: range!(b'a'..=b'z'), t: range!(b'A'..=b'Z'))
+///     input, one_of!(range!(b'0'..=b'9'), range!(b'a'..=b'z'), range!(b'A'..=b'Z'))
 /// );
 /// assert!(char_or_num);
 ///
 /// let should_fail = for_all_ensure(
 ///     input,
-///     one_of!(first: range!(b'0'..=b'9'), second: range!(b'0'..=b'9'), third: range!(b'0'..=b'9'))
+///     one_of!(range!(b'0'..=b'9'), range!(b'0'..=b'9'), range!(b'0'..=b'9'))
 /// );
 /// assert!(!should_fail)
 /// ```
-///
-/// **Why do I need to specify identifiers for the conditions?**
-///
-/// `one_of!` is not as simple as `all!` or `any!` which can utilize a single uniform bit op to get
-/// the result, a simple `xor` would cause odd numbers of successes to yield true. To avoid
-/// computing the conditions more than once the output is stored under the specified ident, and then
-/// we xor and nand this output, then and the results of these and then boom, we have ensured only
-/// one condition held.
 #[macro_export]
 macro_rules! one_of {
-    ($l_i:ident: $left:expr $(,)?) => {
+    ($left:expr $(,)?) => {
         $left
     };
-    ($l_i:ident: $left:expr, $r_i:ident: $right:expr $(,)?) => {
+    ($left:expr, $right:expr $(,)?) => {
         move |data: $crate::arch::Vector| -> $crate::arch::Vector {
             #[allow(unused_unsafe)]
             unsafe { $crate::__xor!($left(data), $right(data)) }
         }
     };
-    ($l_i:ident: $left:expr, $r_i:ident: $right:expr, $($rest:ident: $cond:expr),* $(,)?) => {
-        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
-            // I had tried from the obvious shift conds into place and compute the
-            // hamming weight, perf degraded and less flexible. May be worth revisiting in the
-            // future.
-            #[allow(unused_unsafe)]
-            unsafe {
-                let ($l_i, $r_i, $($rest),+) = ($left(data), $right(data), $($cond(data)),+);
-                // combine xor and nand to ensure only one cond held
-                $crate::arch::and(
-                    // xor all
-                    $crate::__xor!($l_i, $r_i, $($rest),+),
-                    // nand all
-                    $crate::arch::not($crate::__all!($l_i, $r_i, $($rest),+))
-                )
-            }
-        }
+    ($first:expr, $second:expr, $third:expr $(,)?) => {
+        $crate::__one_of!(first: $first, second: $second, third: $third)
+    };
+    ($first:expr, $second:expr, $third:expr, $fourth:expr $(,)?) => {
+        $crate::__one_of!(first: $first, second: $second, third: $third, fourth: $fourth)
     };
 }
 
@@ -694,6 +691,113 @@ mod tests {
         let input = b"hello world";
         let res = for_all_ensure(input, any!(range!(0..=127), eq(b' ')));
         assert!(res);
+    }
+
+    macro_rules! one_of_eq {
+        ($($lit:literal),* $(,)?) => {
+            one_of!($(eq($lit)),*)
+        };
+    }
+
+    macro_rules! ensure_one_of {
+        ($input:ident, $($lit:literal),* $(,)?) => {
+            ensure!($input, one_of_eq!($($lit),*))
+        };
+    }
+
+    macro_rules! failure_perms {
+        ($input:ident, $f_val:literal, $a_val:literal) => {{
+            assert!(!ensure_one_of!($input, $f_val, $f_val));
+            assert!(!ensure_one_of!($input, $f_val, $f_val, $f_val));
+            assert!(!ensure_one_of!($input, $f_val, $f_val, $f_val, $f_val));
+
+            assert!(!ensure_one_of!($input, $f_val, $f_val, $a_val, $a_val));
+            assert!(!ensure_one_of!($input, $a_val, $a_val, $f_val, $f_val));
+
+            assert!(!ensure_one_of!($input, $a_val, $f_val, $a_val, $f_val));
+            assert!(!ensure_one_of!($input, $f_val, $a_val, $f_val, $a_val));
+
+            assert!(!ensure_one_of!($input, $f_val, $a_val, $a_val, $f_val));
+            assert!(!ensure_one_of!($input, $a_val, $f_val, $f_val, $a_val));
+        }};
+    }
+
+    #[test]
+    fn one_of_permutations() {
+        let input = arch::load(&[0u8; 16]);
+        failure_perms!(input, 0, 0);
+        failure_perms!(input, 0, 1);
+        failure_perms!(input, 1, 0);
+
+        assert!(ensure_one_of!(input, 0, 1, 1, 1));
+        assert!(ensure_one_of!(input, 1, 0, 1, 1));
+        assert!(ensure_one_of!(input, 1, 1, 0, 1));
+        assert!(ensure_one_of!(input, 1, 1, 1, 0));
+        assert!(ensure_one_of!(input, 0, 1, 1));
+        assert!(ensure_one_of!(input, 1, 0, 1));
+        assert!(ensure_one_of!(input, 1, 1, 0));
+        assert!(ensure_one_of!(input, 0, 1));
+        assert!(ensure_one_of!(input, 1, 0));
+        assert!(ensure_one_of!(input, 0));
+        assert!(!ensure_one_of!(input, 1));
+
+        // none true
+
+        assert!(!ensure_one_of!(input, 1, 1, 1, 1));
+        assert!(!ensure_one_of!(input, 1, 1, 1));
+        assert!(!ensure_one_of!(input, 1, 1));
+        assert!(!ensure_one_of!(input, 1));
+    }
+
+    macro_rules! one_of_nest {
+        ($($($f_lit:literal),*);* $(;)?) => {
+            one_of!(
+                $(one_of_eq!($($f_lit),*)),+
+            )
+        };
+    }
+
+    #[test]
+    fn one_of_nesting() {
+        let input = arch::load(&[1u8; 16]);
+
+        assert!(ensure!(input, one_of_nest!(
+            1, 0, 0, 0;
+            0, 0, 0, 0;
+            0, 0, 0, 0;
+            0, 0, 0, 0
+        )));
+
+        assert!(!ensure!(input, one_of_nest!(1; 1)));
+
+        assert!(ensure!(input, one_of_nest!(
+            0, 0, 0, 0; // fails
+            1, 1, 1, 1; // fails
+            1, 0, 0, 0  // succeeds therefore true
+        )));
+    }
+
+    macro_rules! ensure_test {
+        (
+            $input:expr, $condition:expr,
+            |$success_byte:ident| $validate_positive:expr,
+            |$failure_byte:ident| $validate_negative:expr
+        ) => {
+            if for_all_ensure($input, $condition) {
+                let mut true_success = true;
+                for $success_byte in $input {
+                    true_success &= $validate_positive;
+                }
+                true_success
+            } else {
+                for $failure_byte in $input {
+                    if $validate_negative {
+                        return true
+                    }
+                }
+                false
+            }
+        };
     }
 
     macro_rules! search_test {
@@ -985,6 +1089,46 @@ mod tests {
                 cmp_test!(range!(>= 64), 64..=255, s),
                 cmp_test!(range!(>= 90), 90..=255, s),
                 cmp_test!(range!(>= 120), 120..=255, s)
+            )
+        }
+
+        fn basic_for_all_ensure(s: Vec<u8>) -> bool {
+            checks!(
+                ensure_test!(
+                    s.as_slice(), eq(0),
+                    |succ| succ == &0,
+                    |fail| fail != &0
+                ),
+                ensure_test!(
+                    s.as_slice(), range!(0..=250),
+                    |succ| matches!(succ, 0..=250),
+                    |fail| matches!(fail, 251..=255)
+                ),
+                ensure_test!(
+                    s.as_slice(), not(eq(0)),
+                    |succ| succ != &0,
+                    |fail| fail == &0
+                ),
+                ensure_test!(
+                    s.as_slice(), any!(eq(0), eq(1)),
+                    |succ| matches!(succ, 0..=1),
+                    |fail| matches!(fail, 2..=255)
+                ),
+                ensure_test!(
+                    s.as_slice(), all!(eq(0), eq(0)),
+                    |succ| succ == &0,
+                    |fail| fail != &0
+                ),
+                ensure_test!(
+                    s.as_slice(), all!(eq(0), eq(1)),
+                    |_succ| false,
+                    |_fail| true
+                ),
+                ensure_test!(
+                    s.as_slice(), any!(eq(0), not(eq(0))),
+                    |_succ| true,
+                    |_fail| false
+                )
             )
         }
     }
