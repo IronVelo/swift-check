@@ -37,7 +37,7 @@ fn main() {
 }
 ```
 
-Ensure every byte is a character, number, or space:
+Ensure every byte is a letter, number, or space:
 ```rust
 use swift_check::{for_all_ensure, any, range, eq};
 
