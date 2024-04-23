@@ -98,7 +98,7 @@ unsafe fn decr_ptr(ptr: *const arch::Ptr) -> *const arch::Ptr {
         -> ret.cast::<u8>().offset_from(ptr) as usize == ptr.align_offset(arch::WIDTH)
 )]
 #[contracts::ensures(
-    old(ptr).align_offset(arch::WIDTH) == 0 -> ret == incr_ptr(simd_ptr(ptr))
+    ptr.align_offset(arch::WIDTH) == 0 -> ret == incr_ptr(simd_ptr(ptr))
 )]
 #[inline(always)]
 unsafe fn align_ptr_or_incr(ptr: *const u8) -> *const arch::Ptr {
@@ -116,55 +116,7 @@ unsafe fn align_ptr_or_incr(ptr: *const u8) -> *const arch::Ptr {
 #[contracts::ensures(incr_ptr(cur) <= end -> true)]
 #[inline(always)]
 unsafe fn can_proceed(cur: *const arch::Ptr, end: *const arch::Ptr) -> bool {
-    cur <= end.sub(arch::STEP)
-}
-
-macro_rules! scan_all {
-    (
-        $data:ident,
-        |$ptr:ident| => $do:expr,
-        unaligned => $handle_partial:expr
-    ) => {{
-        contract::precondition!($data.len() >= 16);
-
-        let mut $ptr = arch::simd_ptr($data.as_ptr());
-        $handle_partial;
-
-        $ptr = align_ptr_or_incr($data.as_ptr());
-
-        let __end = arch::simd_ptr($data.as_ptr().add($data.len()));
-
-        while can_proceed($ptr, __end) {
-            verify_ptr_width!($ptr, __end);
-            $do;
-            $ptr = incr_ptr($ptr);
-        }
-        if let Some($ptr) = adjust_ptr($ptr, __end) {
-            $handle_partial
-        }
-    }};
-}
-
-#[contracts::requires(data.len() >= arch::WIDTH)]
-#[inline(always)]
-pub unsafe fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector, res: &mut bool) {
-    scan_all!(
-        data,
-        |cur| => *res &= crate::ensure!(super::load_aligned(cur), cond),
-        unaligned => *res &= crate::ensure!(super::load_unchecked(cur), cond)
-    );
-}
-
-#[contracts::requires(data.len() >= arch::WIDTH)]
-#[inline(always)]
-pub unsafe fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
-    scan_all!(
-        data,
-        |cur| => if !crate::ensure!(super::load_aligned(cur), cond) { return false },
-        unaligned => if !crate::ensure!(super::load_unchecked(cur), cond) { return false }
-    );
-
-    true
+    cur <= decr_ptr(end)
 }
 
 #[contracts::requires(data.len() >= arch::WIDTH)]
@@ -172,8 +124,9 @@ pub unsafe fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bo
 pub unsafe fn search(data: &[u8], cond: impl Fn(Vector) -> Vector) -> Option<usize> {
     let len = arch::MoveMask::new(cond(arch::load_unchecked(simd_ptr(data.as_ptr()))))
         .trailing_zeros();
-    if len < arch::WIDTH as u32 && len < data.len() as u32 {
+    if len < arch::WIDTH as u32 {
         let ret = Some(len as usize);
+        // Due to the precondition we know ret is in bounds.
         contract::assumed_postcondition!(ret.unwrap() < data.len());
         return ret;
     } else if data.len() == arch::WIDTH {
@@ -187,7 +140,7 @@ pub unsafe fn search(data: &[u8], cond: impl Fn(Vector) -> Vector) -> Option<usi
     let end = simd_ptr(data.as_ptr().add(data.len()));
 
     while can_proceed(cur, end) {
-        // We aligned `cur` at `align_ptr_or_incr`, according to the post conditions of
+        // We aligned `cur` at `align_ptr_or_incr`, according to the postconditions of
         // `can_proceed` and `incr_ptr` we will remain aligned until `can_proceed` yields false.
         let len = arch::MoveMask::new(cond(arch::load_aligned(cur))).trailing_zeros();
 
@@ -226,4 +179,49 @@ pub unsafe fn search(data: &[u8], cond: impl Fn(Vector) -> Vector) -> Option<usi
             None
         }
     })
+}
+
+macro_rules! scan_all {
+    (
+        $data:ident,
+        |$ptr:ident| => $do:expr,
+        unaligned => $handle_partial:expr
+    ) => {{
+        let mut $ptr = arch::simd_ptr($data.as_ptr());
+        $handle_partial;
+
+        $ptr = align_ptr_or_incr($data.as_ptr());
+        let __end = arch::simd_ptr($data.as_ptr().add($data.len()));
+
+        while can_proceed($ptr, __end) {
+            verify_ptr_width!($ptr, __end);
+            $do;
+            $ptr = incr_ptr($ptr);
+        }
+        if let Some($ptr) = adjust_ptr($ptr, __end) {
+            $handle_partial
+        }
+    }};
+}
+
+#[contracts::requires(data.len() >= arch::WIDTH)]
+#[inline(always)]
+pub unsafe fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector, res: &mut bool) {
+    scan_all!(
+        data,
+        |cur| => *res &= crate::ensure!(super::load_aligned(cur), cond),
+        unaligned => *res &= crate::ensure!(super::load_unchecked(cur), cond)
+    );
+}
+
+#[contracts::requires(data.len() >= arch::WIDTH)]
+#[inline(always)]
+pub unsafe fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
+    scan_all!(
+        data,
+        |cur| => if !crate::ensure!(super::load_aligned(cur), cond) { return false },
+        unaligned => if !crate::ensure!(super::load_unchecked(cur), cond) { return false }
+    );
+
+    true
 }

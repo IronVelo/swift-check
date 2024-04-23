@@ -164,7 +164,7 @@ pub unsafe fn load_partial(data: &[u8], count: usize) -> Vector {
     debug_assert_eq!(data.len(), count);
     debug_assert!(count <= 16);
 
-    let mut reg= _mm_setzero_si128(); // Create a register filled with zeros
+    let mut reg = _mm_setzero_si128(); // Create a register filled with zeros
 
     // isolate each lane and add our byte
     set_4_lanes!(data, reg, 0, count);
