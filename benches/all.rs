@@ -184,6 +184,28 @@ fn bench_massive(c: &mut Criterion) {
     let mut g = c.benchmark_group("massive");
     g.throughput(Throughput::Bytes(input.len() as u64));
 
+    input[input.len() - 1] = b'5';
+
+    g.bench_function("find-num-at-end", |b| {
+        b.iter(|| {
+            let Some(pos) = search(black_box(&input), range!(b'0'..=b'9')) else {
+                panic!("input ended with 5")
+            };
+            assert_eq!(input[pos], b'5');
+        })
+    });
+
+    g.bench_function("nom/find-num-at-end", |b| {
+        b.iter(|| {
+            let Ok((rem, _res)) = nom::bytes::complete::take_till::<_, &[u8], nom::error::Error<&[u8]>>(
+                nom::AsChar::is_dec_digit
+            )(black_box(input.as_slice())) else {
+                panic!("input ended with 5")
+            };
+            assert_eq!(rem[0], b'5');
+        })
+    });
+
     g.bench_function("no-find", |b| {
         b.iter(|| {
             let res = search(black_box(&input), eq(1));
@@ -215,6 +237,7 @@ fn bench_massive(c: &mut Criterion) {
             assert!(res);
         })
     });
+
 }
 
 criterion_group!(benches, bench_partial, bench_multi, bench_remainder, bench_massive, bench_aligned);

@@ -6,6 +6,11 @@ use core::arch::x86_64::{
     _mm_movemask_epi8, _mm_or_si128, _mm_set1_epi8, _mm_xor_si128, _mm_setzero_si128
 };
 
+#[cfg(not(feature = "verify"))]
+use mirai_annotations::{precondition};
+#[cfg(feature = "verify")]
+use mirai_annotations::{checked_precondition};
+
 pub type Vector = __m128i;
 pub type Ptr = Vector;
 pub const STEP: usize = 1;
@@ -78,6 +83,7 @@ pub unsafe fn load_unchecked(ptr: *const Ptr) -> Vector {
 ///
 /// The pointer must be aligned to the register width.
 #[inline(always)] #[must_use]
+#[contracts::requires(byte_ptr(ptr).align_offset(super::WIDTH) == 0)]
 pub unsafe fn load_aligned(ptr: *const Ptr) -> Vector {
     _mm_load_si128(ptr)
 }

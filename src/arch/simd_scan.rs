@@ -1,82 +1,122 @@
-use crate::{arch, find};
-use crate::arch::Vector;
+use crate::{arch};
+use crate::arch::{byte_ptr, simd_ptr, Vector};
+use mirai_annotations as contract;
+#[cfg(not(feature = "verify"))]
+use mirai_annotations::{precondition, postcondition};
+#[cfg(feature = "verify")]
+use mirai_annotations::{checked_precondition, checked_postcondition};
 
-#[cfg(debug_assertions)]
-macro_rules! ensure_width {
-    ($ptr:expr, $end_ptr:ident) => {
-        if $ptr.add($crate::arch::STEP) <= $end_ptr {
-            $ptr
-        } else {
-            panic!("Insufficient space between ptr and end at {}:{}", file!(), line!());
-        }
-    };
-}
-
-#[cfg(not(debug_assertions))]
-macro_rules! ensure_width {
-    ($ptr:expr, $end_ptr:ident) => { $ptr };
-}
-
-macro_rules! dbg_assert_ptr_width {
+macro_rules! verify_ptr_width {
     ($ptr:expr, $end_ptr:expr) => {
-        debug_assert!($ptr.add($crate::arch::STEP) <= $end_ptr, "Insufficient space after cur");
+        contract::debug_checked_verify!(
+            incr_ptr($ptr) <= $end_ptr, "Insufficient space after cur"
+        );
     };
 }
 
-/// Adjusts the pointer to handle trailing bytes in the input that do not fill the SIMD
-/// register width.
-///
-/// # Returns
-///
-/// - `Some(ptr)`: Returns a pointer adjusted to handle the remaining bytes unaligned to SIMD
-/// boundaries. This pointer points to a position where the distance to `$end` is exactly the
-/// register width.
-/// - `None`: Indicates that the end of the input has been reached and no adjustment is necessary.
-///
-/// # Safety
-///
-/// - The returned pointer does not guarantee alignment suitable for aligned SIMD loads.
-/// - The operation requires that it must be safe to decrement the pointer by up to the SIMD
-///   register width, implying the entire buffer length must be at least as large as `WIDTH`.
-/// - All standard pointer safety invariants must be upheld, ensuring the pointer remains valid,
-///   does not cause aliasing issues, and does not overlap with other memory regions being
-///   manipulated.
-macro_rules! adjust_ptr {
-    ($start:ident, $end:ident) => {{
-        let c_cast = super::byte_ptr($start);
-        match super::byte_ptr($end).offset_from(c_cast) as usize {
-            0 => None,
-            dist => Some(ensure_width!(super::simd_ptr(c_cast.sub(super::WIDTH - dist)), $end))
-        }
-    }};
+#[contracts::requires(x >= 0)]
+#[contracts::ensures(x as usize == ret)]
+#[inline(always)]
+fn remove_sign(x: isize) -> usize {
+    x as usize
 }
 
-macro_rules! align_ptr {
-    ($ptr:ident, $expr:expr) => {{
-        let byte_ptr = arch::byte_ptr($ptr);
-        let offset = byte_ptr.align_offset(arch::WIDTH);
-        if offset != 0 {
-            // we compute whatever expr, and return the new, now aligned, pointer (which will
-            // overlap what we have already computed)
-            $expr;
-            arch::simd_ptr(byte_ptr.add(offset))
-        } else {
-            $ptr
-        }
-    }};
+#[contracts::requires(l >= r)]
+#[inline(always)]
+unsafe fn offset_from(l: *const u8, r: *const u8) -> isize {
+    let ret = l.offset_from(r);
+    // `l` being greater than 'r' is a precondition, therefore the offset will always be positive.
+    contract::assumed_postcondition!(ret >= 0);
+    ret
 }
 
-/// Compute the distance between `$ptr` from `$data`
-///
-/// This is used in searching, as it tells you how many bytes have we covered to this point.
-///
-/// # Safety
-///
-/// The `$ptr` must be greater than the `data` pointer
-macro_rules! dist {
-    ($ptr:ident from $data:ident) => {
-        arch::byte_ptr($ptr).offset_from($data.as_ptr()) as usize
-    };
+#[contracts::requires(l >= r)]
+#[contracts::ensures(ret == remove_sign(offset_from(l, r)))]
+#[inline(always)]
+unsafe fn distance(l: *const u8, r: *const u8) -> usize {
+    remove_sign(offset_from(l, r))
+}
+
+#[contracts::requires(dist <= arch::WIDTH)]
+#[contracts::ensures(
+    dist == distance(byte_ptr(_end), cur) -> incr_ptr(simd_ptr(ret)) == _end,
+    "If `dist` is the byte offset of `_end` to `cur` then incr_ptr(simd_ptr(ret)) equates to `_end`"
+)]
+#[inline(always)]
+unsafe fn make_space(cur: *const u8, dist: usize, _end: *const arch::Ptr) -> *const u8 {
+    cur.sub(arch::WIDTH - dist)
+}
+
+#[contracts::requires(
+    end >= cur,
+    "The `end` ptr must be greater than or equal to `cur`"
+)]
+#[contracts::requires(
+    cur >= decr_ptr(end) && distance(byte_ptr(end), byte_ptr(cur)) <= arch::WIDTH,
+    "The distance between `end` and `cur` must be less than arch::WIDTH"
+)]
+#[contracts::ensures(
+    distance(byte_ptr(end), byte_ptr(cur)) != 0 -> incr_ptr(ret.unwrap()) == end,
+    "If there is distance between `end` and `cur` this will always return Some"
+)]
+#[contracts::ensures(
+    ret.is_some() -> incr_ptr(ret.unwrap()) == end,
+    "If Some is returned the wrapped ptr will always have a distance of arch::WIDTH to `end` \
+    (no assurance of alignment)"
+)]
+#[inline(always)]
+unsafe fn adjust_ptr(cur: *const arch::Ptr, end: *const arch::Ptr) -> Option<*const arch::Ptr> {
+    match dbg!(distance(byte_ptr(end), byte_ptr(cur))) {
+        0 => None,
+        dist => {
+            // The first precondition states that the distance between byte_ptr(end) and
+            // byte_ptr(cur) must be less than or equal to arch::WIDTH.
+            contract::checked_assume!(dist <= arch::WIDTH);
+            Some(simd_ptr(make_space(byte_ptr(cur), dist, end)))
+        }
+    }
+}
+
+#[contracts::ensures(ptr == decr_ptr(ret))]
+#[contracts::ensures(ptr.add(arch::STEP) == ret)]
+#[contracts::ensures(byte_ptr(decr_ptr(ret)) == byte_ptr(ptr))]
+#[contracts::ensures(ptr.align_offset(arch::WIDTH) == 0 -> ret.align_offset(arch::WIDTH) == 0)]
+#[inline(always)]
+unsafe fn incr_ptr(ptr: *const arch::Ptr) -> *const arch::Ptr {
+    ptr.add(arch::STEP)
+}
+
+#[contracts::ensures(incr_ptr(ret) == ptr)]
+#[contracts::ensures(ptr.align_offset(arch::WIDTH) == 0 -> ret.align_offset(arch::WIDTH) == 0)]
+#[inline(always)]
+unsafe fn decr_ptr(ptr: *const arch::Ptr) -> *const arch::Ptr {
+    ptr.sub(arch::STEP)
+}
+
+#[contracts::ensures(
+    ptr.align_offset(arch::WIDTH) != 0
+        -> ret.cast::<u8>().offset_from(ptr) as usize == ptr.align_offset(arch::WIDTH)
+)]
+#[contracts::ensures(
+    old(ptr).align_offset(arch::WIDTH) == 0 -> ret == incr_ptr(simd_ptr(ptr))
+)]
+#[inline(always)]
+unsafe fn align_ptr_or_incr(ptr: *const u8) -> *const arch::Ptr {
+    let offset = ptr.align_offset(arch::WIDTH);
+    if offset == 0 {
+        // When the pointer is already aligned, increment it by `arch::STEP`
+        incr_ptr(simd_ptr(ptr))
+    } else {
+        // When the pointer is not aligned, adjust it to the next alignment boundary
+        simd_ptr(ptr.add(offset))
+    }
+}
+
+#[contracts::ensures(cur.align_offset(arch::WIDTH) == 0 -> cur.align_offset(arch::WIDTH) == 0)]
+#[contracts::ensures(incr_ptr(cur) <= end -> true)]
+#[inline(always)]
+unsafe fn can_proceed(cur: *const arch::Ptr, end: *const arch::Ptr) -> bool {
+    cur <= end.sub(arch::STEP)
 }
 
 macro_rules! scan_all {
@@ -85,27 +125,27 @@ macro_rules! scan_all {
         |$ptr:ident| => $do:expr,
         unaligned => $handle_partial:expr
     ) => {{
-        debug_assert!($data.len() >= arch::WIDTH);
-        let mut $ptr = arch::simd_ptr($data.as_ptr());
+        contract::precondition!($data.len() >= 16);
 
-        $ptr = align_ptr!($ptr, $handle_partial);
+        let mut $ptr = arch::simd_ptr($data.as_ptr());
+        $handle_partial;
+
+        $ptr = align_ptr_or_incr($data.as_ptr());
 
         let __end = arch::simd_ptr($data.as_ptr().add($data.len()));
-        while $ptr < __end.sub(arch::STEP) {
-            dbg_assert_ptr_width!($ptr, __end);
+
+        while can_proceed($ptr, __end) {
+            verify_ptr_width!($ptr, __end);
             $do;
-            $ptr = $ptr.add(arch::STEP);
+            $ptr = incr_ptr($ptr);
         }
-        if let Some($ptr) = adjust_ptr!($ptr, __end) {
+        if let Some($ptr) = adjust_ptr($ptr, __end) {
             $handle_partial
         }
     }};
 }
 
-/// # Safety
-///
-/// This function makes the assumption that the data is greater than or equal to the SIMD register
-/// width. It is the responsibility of the caller to ensure this invariant is upheld.
+#[contracts::requires(data.len() >= arch::WIDTH)]
 #[inline(always)]
 pub unsafe fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector, res: &mut bool) {
     scan_all!(
@@ -115,10 +155,7 @@ pub unsafe fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector, re
     );
 }
 
-/// # Safety
-///
-/// This function makes the assumption that the data is greater than or equal to the SIMD register
-/// width. It is the responsibility of the caller to ensure this invariant is upheld.
+#[contracts::requires(data.len() >= arch::WIDTH)]
 #[inline(always)]
 pub unsafe fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
     scan_all!(
@@ -130,38 +167,63 @@ pub unsafe fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bo
     true
 }
 
-/// # Safety
-///
-/// This function makes the assumption that the data is greater than or equal to the SIMD register
-/// width. It is the responsibility of the caller to ensure this invariant is upheld.
+#[contracts::requires(data.len() >= arch::WIDTH)]
 #[inline(always)]
 pub unsafe fn search(data: &[u8], cond: impl Fn(Vector) -> Vector) -> Option<usize> {
-    debug_assert!(data.len() >= arch::WIDTH);
-    let mut cur = arch::simd_ptr(data.as_ptr());
-
-    // align the cur ptr, if we find the true cond in the alignment process return that
-    cur = align_ptr!(
-        cur,
-        if let Some(position) = find!(arch::load_unchecked(cur), cond) {
-            return Some(position as usize)
-        }
-    );
-
-    let end = arch::simd_ptr(data.as_ptr().add(data.len()));
-
-    while cur <= end.sub(arch::STEP) {
-        dbg_assert_ptr_width!(cur, end);
-        if let Some(position) = find!(arch::load_aligned(cur), cond) {
-            return Some(
-                position as usize + dist!(cur from data)
-            )
-        }
-        cur = cur.add(arch::STEP);
+    let len = arch::MoveMask::new(cond(arch::load_unchecked(simd_ptr(data.as_ptr()))))
+        .trailing_zeros();
+    if len < arch::WIDTH as u32 && len < data.len() as u32 {
+        let ret = Some(len as usize);
+        contract::assumed_postcondition!(ret.unwrap() < data.len());
+        return ret;
+    } else if data.len() == arch::WIDTH {
+        return None;
     }
 
-    adjust_ptr!(cur, end).and_then(|ptr| {
-        dbg_assert_ptr_width!(ptr, end);
-        find!(arch::load_unchecked(ptr), cond)
-            .map(|pos| pos as usize + dist!(ptr from data))
+    // We have already checked the first arch::WIDTH of data. Rather than just continuing we align
+    // the current pointer. If it was unaligned we will search an overlapping space as the initial
+    // check.
+    let mut cur  = align_ptr_or_incr(data.as_ptr());
+    let end = simd_ptr(data.as_ptr().add(data.len()));
+
+    while can_proceed(cur, end) {
+        // We aligned `cur` at `align_ptr_or_incr`, according to the post conditions of
+        // `can_proceed` and `incr_ptr` we will remain aligned until `can_proceed` yields false.
+        let len = arch::MoveMask::new(cond(arch::load_aligned(cur))).trailing_zeros();
+
+        if len < arch::WIDTH as u32 {
+            // The first postcondition of `can_proceed` states that if true (meaning we are here)
+            // then there is at least arch::WIDTH from `cur` to `end`, meaning that as long as
+            // len is less than arch::WIDTH adding the length with distance from `cur` to `data`
+            // will always be in bounds.
+            let ret = Some(len as usize + distance(byte_ptr(cur), data.as_ptr()));
+            contract::assumed_postcondition!(ret.unwrap() < data.len());
+            return ret;
+        }
+
+        cur = incr_ptr(cur);
+    }
+
+    adjust_ptr(cur, end).and_then(|ptr| {
+        verify_ptr_width!(ptr, end);
+
+        let len = arch::MoveMask::new(cond(arch::load_unchecked(ptr))).trailing_zeros();
+        if len < arch::WIDTH as u32 {
+            // According to the postconditions of `adjust_ptr` if Some is returned the wrapped
+            // pointer is exactly arch::WIDTH from `end`. Therefore, as long as the `len` is below
+            // arch::WIDTH the sum of the `len` with the distance from `ptr` to `data` will always
+            // be in bounds.
+            let ret = Some(len as usize + distance(byte_ptr(ptr), data.as_ptr()));
+            contract::assumed_postcondition!(
+                match ret {
+                    Some(d) if d < data.len() => true,
+                    Some(_) => false,
+                    _ => true
+                }
+            );
+            ret
+        } else {
+            None
+        }
     })
 }

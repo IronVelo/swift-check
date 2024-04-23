@@ -26,10 +26,10 @@
 //! assert_eq!(input[first_space2], b' ');
 //! assert_eq!(first_space2, first_space);
 //! ```
-#![allow(unused_unsafe)] // fallback
-#![cfg_attr(not(test), no_std)]
-#![cfg_attr(not(test), no_builtins)]
-
+#![allow(unused_unsafe, unused_parens)] // fallback
+// #![cfg_attr(not(test), no_std)]
+// #![cfg_attr(not(test), no_builtins)]
+//
 pub mod arch;
 use arch::Vector;
 
@@ -87,7 +87,7 @@ macro_rules! __is_found {
 /// let input = b"aaaaaaaaaaaaaaaB";
 /// let data = load(input);
 ///
-/// if let Some(position) = find!(data, eq(b'B')) {
+/// if let Some(position) = find(data, eq(b'B')) {
 ///     assert_eq!(position as usize, input.len() - 1);
 /// } else {
 ///     unreachable!("B is within the data");
@@ -95,6 +95,12 @@ macro_rules! __is_found {
 /// ```
 ///
 /// **Note**: This is part of the lower level api, for better ergonomics see [`search`].
+#[inline(always)]
+pub fn find(data: Vector, cond: impl Fn(Vector) -> Vector) -> Option<u32> {
+    let len = unsafe { arch::MoveMask::new(cond(data)).trailing_zeros() };
+    if len >= arch::MoveMask::MAX_TRAIL { None } else { Some(len) }
+}
+
 #[macro_export]
 macro_rules! find {
     ($data:expr, $cond:expr) => {
@@ -520,13 +526,13 @@ macro_rules! all {
     };
     // Two arguments: directly apply AND between them
     ($left:expr, $right:expr $(,)?) => {
-        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
+        |data: $crate::arch::Vector| -> $crate::arch::Vector {
             #[allow(unused_unsafe)]
             unsafe { $crate::__all!($left(data), $right(data)) }
         }
     };
     ($left:expr, $right:expr, $($rest:expr),+ $(,)?) => {
-        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
+        |data: $crate::arch::Vector| -> $crate::arch::Vector {
             #[allow(unused_unsafe)]
             unsafe { $crate::__all!($left(data), $right(data), $($rest(data)),+) }
         }
@@ -584,13 +590,13 @@ macro_rules! any {
         $left
     };
     ($left:expr, $right:expr $(,)?) => {
-        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
+        |data: $crate::arch::Vector| -> $crate::arch::Vector {
             #[allow(unused_unsafe)]
             unsafe { $crate::__or!($left(data), $right(data)) }
         }
     };
     ($left:expr, $right:expr, $($rest:expr),+ $(,)?) => {
-        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
+        |data: $crate::arch::Vector| -> $crate::arch::Vector {
             #[allow(unused_unsafe)]
             unsafe { $crate::__or!($left(data), $right(data), $($rest(data)),+) }
         }
@@ -618,7 +624,7 @@ macro_rules! __xor {
 #[doc(hidden)]
 macro_rules! __one_of {
     ($l_i:ident: $left:expr, $r_i:ident: $right:expr, $($rest:ident: $cond:expr),* $(,)?) => {
-        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
+        |data: $crate::arch::Vector| -> $crate::arch::Vector {
             // I had tried from the obvious shift conds into place and compute the
             // hamming weight, perf degraded and less flexible. May be worth revisiting in the
             // future. Yes, this approach is flawed and does not scale to large numbers of args
@@ -664,7 +670,7 @@ macro_rules! one_of {
         $left
     };
     ($left:expr, $right:expr $(,)?) => {
-        move |data: $crate::arch::Vector| -> $crate::arch::Vector {
+        |data: $crate::arch::Vector| -> $crate::arch::Vector {
             #[allow(unused_unsafe)]
             unsafe { $crate::__xor!($left(data), $right(data)) }
         }
@@ -677,7 +683,7 @@ macro_rules! one_of {
     };
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(mirai)))]
 mod tests {
     use super::*;
     use quickcheck::quickcheck;
@@ -1130,5 +1136,18 @@ mod tests {
                 )
             )
         }
+    }
+}
+
+#[cfg(all(test))]
+mod mirai_tests {
+    use crate::{eq, search};
+
+    #[test]
+    fn simple_search() {
+        let input = b"I am a simple input to evaluate the correctness of the search";
+
+        let res = search(input, eq(b'h')).unwrap();
+        assert_eq!(input[res], b'h');
     }
 }
