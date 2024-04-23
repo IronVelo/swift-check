@@ -66,7 +66,7 @@ unsafe fn make_space(cur: *const u8, dist: usize, _end: *const arch::Ptr) -> *co
 )]
 #[inline(always)]
 unsafe fn adjust_ptr(cur: *const arch::Ptr, end: *const arch::Ptr) -> Option<*const arch::Ptr> {
-    match dbg!(distance(byte_ptr(end), byte_ptr(cur))) {
+    match distance(byte_ptr(end), byte_ptr(cur)) {
         0 => None,
         dist => {
             // The first precondition states that the distance between byte_ptr(end) and
