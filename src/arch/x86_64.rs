@@ -1,20 +1,39 @@
 #![allow(clippy::missing_safety_doc)]
+use crate::arch::is_aligned;
 
 use core::arch::x86_64::{
     __m128i,
-    _mm_and_si128, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_cmplt_epi8, _mm_load_si128, _mm_loadu_si128,
-    _mm_movemask_epi8, _mm_or_si128, _mm_set1_epi8, _mm_xor_si128, _mm_setzero_si128
+    _mm_and_si128, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_cmplt_epi8, _mm_load_si128,
+    _mm_or_si128, _mm_set1_epi8, _mm_xor_si128, _mm_setzero_si128
 };
 
-#[cfg(not(feature = "verify"))]
-use mirai_annotations::{precondition};
-#[cfg(feature = "verify")]
-use mirai_annotations::{checked_precondition};
+cfg_runtime!(
+    use core::arch::x86_64::{
+        _mm_movemask_epi8, _mm_loadu_si128,
+    };
+    #[allow(unused_imports)]
+    use mirai_annotations::{checked_precondition, precondition};
+);
+
+
+cfg_verify!(
+    use mirai_annotations::{checked_precondition};
+
+    // foreign specifications
+    fn _mm_movemask_epi8(_input: Vector) -> i32  {
+        mirai_annotations::result!()
+    }
+
+    fn _mm_loadu_si128(_ptr: *const Ptr) -> Vector {
+        mirai_annotations::result!()
+    }
+);
 
 pub type Vector = __m128i;
 pub type Ptr = Vector;
 pub const STEP: usize = 1;
 pub const STEP_SIZE: usize = 16;
+
 #[repr(transparent)]
 pub struct MoveMask(u32);
 impl MoveMask {
@@ -82,8 +101,8 @@ pub unsafe fn load_unchecked(ptr: *const Ptr) -> Vector {
 /// # Safety
 ///
 /// The pointer must be aligned to the register width.
+#[contracts::requires(is_aligned(ptr))]
 #[inline(always)] #[must_use]
-#[contracts::requires(byte_ptr(ptr).align_offset(super::WIDTH) == 0)]
 pub unsafe fn load_aligned(ptr: *const Ptr) -> Vector {
     _mm_load_si128(ptr)
 }
@@ -91,10 +110,11 @@ pub unsafe fn load_aligned(ptr: *const Ptr) -> Vector {
 #[inline(always)] #[must_use]
 pub fn load(data: &[u8; 16]) -> Vector {
     let ptr = data.as_ptr();
-    if ptr.align_offset(16) == 0 {
-        unsafe { load_aligned(ptr.cast()) }
+    if ptr.align_offset(super::WIDTH) == 0 {
+        // We just checked the alignment of the pointer
+        unsafe { load_aligned(simd_ptr(ptr)) }
     } else {
-        unsafe { load_unchecked(ptr.cast()) }
+        unsafe { load_unchecked(simd_ptr(ptr)) }
     }
 }
 

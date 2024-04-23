@@ -237,7 +237,6 @@ fn bench_massive(c: &mut Criterion) {
             assert!(res);
         })
     });
-
 }
 
 criterion_group!(benches, bench_partial, bench_multi, bench_remainder, bench_massive, bench_aligned);

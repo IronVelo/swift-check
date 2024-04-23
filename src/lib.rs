@@ -29,7 +29,7 @@
 #![allow(unused_unsafe, unused_parens)] // fallback
 // #![cfg_attr(not(test), no_std)]
 // #![cfg_attr(not(test), no_builtins)]
-//
+
 pub mod arch;
 use arch::Vector;
 
@@ -1141,13 +1141,19 @@ mod tests {
 
 #[cfg(all(test))]
 mod mirai_tests {
-    use crate::{eq, search};
+    use crate::{eq, for_all_ensure, for_all_ensure_ct, search};
 
     #[test]
     fn simple_search() {
-        let input = b"I am a simple input to evaluate the correctness of the search";
+        let input = b"I am a simple input to evaluate the correctness of the search adjflkasdfl;kjasdfl;kjasdl;kjasl;kdjf";
 
         let res = search(input, eq(b'h')).unwrap();
         assert_eq!(input[res], b'h');
+
+        let res = for_all_ensure_ct(input, eq(b' '));
+        assert!(!res);
+
+        let res = for_all_ensure(input, eq(b' '));
+        assert!(!res);
     }
 }

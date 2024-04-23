@@ -75,3 +75,21 @@ macro_rules! cfg_simd {
         )*
     };
 }
+
+macro_rules! cfg_verify {
+    ($($item:item)*) => {
+        $(
+            #[cfg(feature = "verify")]
+            $item
+        )*
+    };
+}
+
+macro_rules! cfg_runtime {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(feature = "verify"))]
+            $item
+        )*
+    };
+}

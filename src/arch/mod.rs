@@ -2,6 +2,25 @@ pub(crate) const WIDTH: usize = 16;
 #[macro_use]
 mod cfg_macros;
 
+pub(crate) fn is_aligned(ptr: *const Ptr) -> bool {
+    byte_ptr(ptr).align_offset(WIDTH) == 0
+}
+
+cfg_verify!(
+    macro_rules! contract {
+        ($kind:ident!($args:expr)) => {
+            mirai_annotations::$kind!($args)
+        };
+    }
+);
+
+cfg_runtime!(
+    macro_rules! contract {
+        ($kind:ident!($args:expr)) => {};
+    }
+);
+
+
 cfg_neon!(
     pub mod aarch64;
     pub use aarch64 as arch;
