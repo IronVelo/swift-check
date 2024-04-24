@@ -14,7 +14,7 @@ Add Swift Check to your project by including it in your Cargo.toml:
 
 ```toml
 [dependencies]
-swift-check = "0.1.1"
+swift-check = "0.1.2"
 ```
 
 ### Quick Start
@@ -58,10 +58,10 @@ This crate's minimum supported `rustc` version is `1.61.0`
 
 ### Testing
 
-To compensate for the great deal of `unsafe` this crate leverages advanced testing methodologies:
+To compensate for the great deal of `unsafe` this crate leverages rigorous testing methodologies:
 
-- **Design by Contract**: While not formal verification, it is fair to consider it the next best thing. In critical 
-  areas where the most things can go wrong (`arch/simd_scan.rs`) each function is annotated with pre- and 
+- **Design by Contract**: While not formal verification, it brings more confidence than simple property testing. In 
+  critical areas where the most things can go wrong (`arch/simd_scan.rs`) each function is annotated with pre- and 
   post-conditions which are statically verified.
 - **Property Testing**: To ensure this crate behaves the same on all supported architectures there is a suite of 
   property tests targeting the slight nuances between them.

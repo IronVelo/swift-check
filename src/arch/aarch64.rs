@@ -40,7 +40,7 @@ impl MoveMask {
 
     #[inline(always)] #[must_use]
     pub const fn trailing_ones(&self) -> u32 {
-        self.0.trailing_ones()
+        self.0.trailing_ones() >> 2
     }
 }
 
