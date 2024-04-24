@@ -8,18 +8,17 @@ use core::arch::x86_64::{
     _mm_or_si128, _mm_set1_epi8, _mm_xor_si128, _mm_setzero_si128
 };
 
+#[allow(unused_imports)]
+use mirai_annotations::{checked_precondition, precondition};
+
 cfg_runtime!(
     use core::arch::x86_64::{
         _mm_movemask_epi8, _mm_loadu_si128,
     };
-    #[allow(unused_imports)]
-    use mirai_annotations::{checked_precondition, precondition};
 );
 
 
 cfg_verify!(
-    use mirai_annotations::{checked_precondition};
-
     // foreign specifications
     fn _mm_movemask_epi8(_input: Vector) -> i32  {
         mirai_annotations::result!()
