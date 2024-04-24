@@ -56,6 +56,18 @@ fn main() {
 
 This crate's minimum supported `rustc` version is `1.61.0`
 
+### Testing
+
+To compensate for the great deal of `unsafe` this crate leverages advanced testing methodologies:
+
+- **Design by Contract**: While not formal verification, it is fair to consider it the next best thing. In critical 
+  areas where the most things can go wrong (`arch/simd_scan.rs`) each function is annotated with pre- and 
+  post-conditions which are statically verified.
+- **Property Testing**: To ensure this crate behaves the same on all supported architectures there is a suite of 
+  property tests targeting the slight nuances between them.
+- **Fuzz Testing**: LibFuzzer is used with runtime contract assertions to ensure no undefined behavior takes place.
+- **Unit Testing**: For basic sanity checks
+
 ### Contributing
 
 We warmly welcome contributions from the community! If you're interested in helping Swift Check grow and improve, here 
@@ -80,11 +92,3 @@ implementation. The main advantage of the struct-based approach is its ability t
 it enables us to perform simple searches over smaller inputs instead of relying on partial SIMD loads. However, the
 trade-off is complexity: adopting this method could require shifting to procedural macros or requiring users to provide
 identifiers for each condition in our declarative macros.
-
-### Performance
-
-For massive inputs if you're just searching for a simple needle the `memchr` crate is a better bet. In these
-circumstances `memchr` outperforms this crate by ~2x. This is primarily an algorithmic difference, as the higher level
-api of this crate as previously acknowledged has much room for optimization, so this gap should be reduced as time goes
-on. In general use `memchr` and `swift-check` go back and forth as to who is more performant, for more details run the
-benches yourself with `cargo bench`. 

@@ -1,5 +1,5 @@
 use crate::arch::{self, byte_ptr, simd_ptr, Vector};
-use mirai_annotations as contract;
+#[allow(unused_imports)]
 use crate::arch::is_aligned;
 
 #[allow(unused_imports)]
@@ -7,7 +7,6 @@ use mirai_annotations::{
     checked_precondition, checked_postcondition,
     precondition, postcondition
 };
-
 
 #[contracts::requires(x >= 0)]
 #[contracts::ensures(x as usize == ret)]
@@ -196,7 +195,7 @@ macro_rules! valid_len_then {
     ($len:ident, $do:expr $(, $otherwise:expr)?) => {
         if valid_len($len) {
             // Re-emphasize postcondition of `valid_len`
-            contract::debug_checked_assume!(valid_len($len));
+            contract!(debug_checked_assume!(valid_len($len)));
             $do
         } $( else {
             $otherwise
@@ -206,14 +205,12 @@ macro_rules! valid_len_then {
 
 #[contracts::requires(data.len() >= arch::WIDTH)]
 #[contracts::ensures(ret.is_some() -> ret.unwrap() < data.len())]
-#[inline(always)]
+#[inline]
 pub unsafe fn search<F: Fn(Vector) -> Vector>(data: &[u8], cond: F) -> Option<usize> {
     let len = arch::MoveMask::new(cond(arch::load_unchecked(simd_ptr(data.as_ptr()))))
         .trailing_zeros();
-    if valid_len(len) {
-        // Due to the precondition we know len is in bounds.
-        return Some(len as usize);
-    }
+
+    if valid_len(len) { return Some(len as usize); }
 
     // We have already checked the first arch::WIDTH of data. Rather than just continuing we align
     // the current pointer. If it was unaligned we will search an overlapping space as the initial
@@ -222,7 +219,7 @@ pub unsafe fn search<F: Fn(Vector) -> Vector>(data: &[u8], cond: F) -> Option<us
     let end = simd_ptr(data.as_ptr().add(data.len()));
 
     while can_proceed(cur, end) {
-        mirai_annotations::debug_checked_verify!(is_aligned(cur));
+        contract!(debug_checked_verify!(is_aligned(cur)));
         // We aligned `cur` at `align_ptr_or_incr`, according to the postconditions of
         // `can_proceed` and `incr_ptr` we will remain aligned until `can_proceed` yields false.
         let len = arch::MoveMask::new(cond(arch::load_aligned(cur))).trailing_zeros();
@@ -263,7 +260,7 @@ pub unsafe fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector, re
     let end = simd_ptr(data.as_ptr().add(data.len()));
 
     while can_proceed(cur, end) {
-        mirai_annotations::debug_checked_verify!(is_aligned(cur));
+        contract!(debug_checked_verify!(is_aligned(cur)));
         // Outside the loop we ensured `cur` is aligned at this point. According to the post
         // condition of `incr_ptr` if the pointer being incremented was initially aligned to the
         // register width, it will retain this alignment. Therefore, we know it is safe to do an
@@ -298,7 +295,7 @@ pub unsafe fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bo
     let end = simd_ptr(data.as_ptr().add(data.len()));
 
     while can_proceed(cur, end) {
-        mirai_annotations::debug_checked_verify!(is_aligned(cur));
+        contract!(debug_checked_verify!(is_aligned(cur)));
 
         // Outside the loop we ensured `cur` is aligned at this point. According to the post
         // condition of `incr_ptr` if the pointer being incremented was initially aligned to the

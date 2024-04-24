@@ -2,6 +2,7 @@ pub(crate) const WIDTH: usize = 16;
 #[macro_use]
 mod cfg_macros;
 
+#[allow(dead_code)]
 pub(crate) fn is_aligned(ptr: *const Ptr) -> bool {
     byte_ptr(ptr).align_offset(WIDTH) == 0
 }

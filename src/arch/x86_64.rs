@@ -1,4 +1,5 @@
 #![allow(clippy::missing_safety_doc)]
+#[allow(unused_imports)]
 use crate::arch::is_aligned;
 
 use core::arch::x86_64::{
