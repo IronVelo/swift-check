@@ -1,6 +1,6 @@
 [package]
 name = "swift-check"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 authors = ["Clelland Green <cg@ironvelo.com>"]
 description = "High-performance library for expressive searching and validation (uses SIMD on x86_64, aarch64, and WASM)"
