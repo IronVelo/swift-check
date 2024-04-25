@@ -20,12 +20,12 @@ cfg_verify!(
 );
 
 cfg_runtime!(
+    #[allow(unused_macros)]
     macro_rules! contract {
         ($kind:ident!($args:expr)) => {};
         ($expr:expr) => {};
     }
 );
-
 
 cfg_neon!(
     pub mod aarch64;

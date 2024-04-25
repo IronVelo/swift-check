@@ -151,6 +151,11 @@ pub const unsafe fn load_aligned(data: &[u8]) -> Vector {
 }
 
 #[inline(always)] #[must_use]
+pub unsafe fn maybe_aligned_load(data: &[u8]) -> crate::arch::Vector {
+    load_unchecked(data)
+}
+
+#[inline(always)] #[must_use]
 pub const fn byte_ptr(ptr: *const Ptr) -> *const u8 {
     ptr.cast()
 }
