@@ -40,6 +40,10 @@ use arch::Vector;
 /// * `data` - The `Vector` to check each element of
 /// * `cond` - The condition to check
 ///
+/// # Returns
+///
+/// `true` if the `cond` was satisfied for each byte, `false` otherwise.
+///
 /// # Example
 ///
 /// ```
@@ -48,28 +52,25 @@ use arch::Vector;
 /// let input = b"2112111211211211";
 /// let data = load(input);
 ///
-/// let two_or_one = ensure!(data, any!(eq(b'1'), eq(b'2')));
+/// let two_or_one = ensure(data, any!(eq(b'1'), eq(b'2')));
 /// assert!(two_or_one);
 ///
-/// let should_fail = ensure!(data, eq(b'1'));
+/// let should_fail = ensure(data, eq(b'1'));
 /// assert!(!should_fail);
 /// ```
 ///
-/// **Note**: This is part of the lower level api, for better ergonomics see [`for_all_ensure`].
-#[macro_export]
+/// **Note**: This is part of the lower-level api, for better ergonomics see [`for_all_ensure`] or
+/// [`for_all_ensure_ct`] if branching on the data's contents is unacceptable for security reasons.
+#[inline(always)] #[must_use]
+pub fn ensure(data: Vector, cond: impl Fn(Vector) -> Vector) -> bool {
+    unsafe { arch::MoveMask::new(cond(data)).all_bits_set() }
+}
+
+#[macro_export] #[doc(hidden)]
 macro_rules! ensure {
     ($data:expr, $cond:expr) => {
         unsafe { $crate::arch::MoveMask::new($cond($data)).all_bits_set() }
     };
-}
-
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __is_found {
-    ($cond_eval:expr, |$len:ident| $then:expr, || $otherwise:expr) => { unsafe {
-        let $len = $crate::arch::MoveMask::new($cond_eval).trailing_zeros();
-        if $len == $crate::arch::MoveMask::MAX_TRAIL { $otherwise } else { $then }
-    }};
 }
 
 /// Find the first circumstance of the condition being met
@@ -78,6 +79,11 @@ macro_rules! __is_found {
 ///
 /// * `data` - The `Vector` to search
 /// * `cond` - The condition to find
+///
+/// # Returns
+///
+/// - `Some(position)`: The first position of the condition being met.
+/// - `None`: The condition was never met.
 ///
 /// # Example
 ///
@@ -94,14 +100,22 @@ macro_rules! __is_found {
 /// }
 /// ```
 ///
-/// **Note**: This is part of the lower level api, for better ergonomics see [`search`].
+/// **Note**: This is part of the lower-level api, for better ergonomics see [`search`].
 #[inline(always)]
 pub fn find(data: Vector, cond: impl Fn(Vector) -> Vector) -> Option<u32> {
     let len = unsafe { arch::MoveMask::new(cond(data)).trailing_zeros() };
     if len >= arch::MoveMask::MAX_TRAIL { None } else { Some(len) }
 }
 
-#[macro_export]
+#[doc(hidden)] #[macro_export]
+macro_rules! __is_found {
+    ($cond_eval:expr, |$len:ident| $then:expr, || $otherwise:expr) => { unsafe {
+        let $len = $crate::arch::MoveMask::new($cond_eval).trailing_zeros();
+        if $len == $crate::arch::MoveMask::MAX_TRAIL { $otherwise } else { $then }
+    }};
+}
+
+#[doc(hidden)] #[macro_export]
 macro_rules! find {
     ($data:expr, $cond:expr) => {
         $crate::__is_found!($cond($data), |__len| Some(__len), || None)
@@ -123,10 +137,9 @@ macro_rules! find {
 /// * `cond` - The condition to validate with, this should be some composition of the conditions
 ///            exposed within this crate.
 ///
-/// # Performance
+/// # Returns
 ///
-/// For anything less than 16 bytes you will not benefit from using this, in fact for simple
-/// conditions a branchless search will outperform this by a good amount.
+/// `true` if every byte in `data` met the `cond`, `false` otherwise.
 ///
 /// # Example
 ///
@@ -143,7 +156,7 @@ macro_rules! find {
 /// let should_fail = for_all_ensure_ct(input, any!(range!(b'a'..=b'z'), eq(b'I'), eq(b' ')));
 /// assert!(!should_fail);
 /// ```
-#[inline]
+#[inline] #[must_use]
 pub fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
     let mut valid = true;
     if data.len() >= arch::WIDTH {
@@ -168,6 +181,10 @@ pub fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
 /// * `cond` - The condition to validate with, this should be some composition of the conditions
 ///            exposed within this crate.
 ///
+/// # Returns
+///
+/// `true` if every byte in `data` met the `cond`, `false` otherwise.
+///
 /// # Performance
 ///
 /// For anything less than 16 bytes you will not benefit from using this, in fact for simple
@@ -186,7 +203,7 @@ pub fn for_all_ensure_ct(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
 /// let should_fail = for_all_ensure(input, any!(range!(b'a'..=b'z'), eq(b'I'), eq(b' ')));
 /// assert!(!should_fail);
 /// ```
-#[inline]
+#[inline] #[must_use]
 pub fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
     if data.len() >= arch::WIDTH {
         unsafe { arch::scan::for_all_ensure(data, cond) }
@@ -205,6 +222,13 @@ pub fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
 /// * `data` - The haystack to search
 /// * `cond` - The condition to find the first occurrence of
 ///
+/// # Returns
+///
+/// - `Some(position)` - The first position where the condition was met, this position will always
+///   be less than `data.len()` ensuring that indexing it will never panic. If you're interested in
+///   further investigating this claim see `arch/simd_scan.rs`.
+/// - `None` - There was no circumstance of the condition being met.
+///
 /// # Example
 ///
 /// ```
@@ -214,7 +238,7 @@ pub fn for_all_ensure(data: &[u8], cond: impl Fn(Vector) -> Vector) -> bool {
 /// if let Some(pos) = search(input, eq(b'5')) {
 ///     assert_eq!(input[pos], b'5');
 /// } else {
-///     panic!("input contained a 5");
+///     unreachable!("input contained a 5");
 /// }
 /// ```
 #[inline]
@@ -539,8 +563,7 @@ macro_rules! all {
     };
 }
 
-#[macro_export]
-#[doc(hidden)]
+#[doc(hidden)] #[macro_export]
 macro_rules! __or {
     ($left:expr) => {
         // or against nothing, so just return left
@@ -603,8 +626,7 @@ macro_rules! any {
     }
 }
 
-#[macro_export]
-#[doc(hidden)]
+#[doc(hidden)] #[macro_export]
 macro_rules! __xor {
     ($left:expr $(,)?) => {
         $left
@@ -620,18 +642,15 @@ macro_rules! __xor {
     };
 }
 
-#[macro_export]
-#[doc(hidden)]
+#[macro_export] #[doc(hidden)]
 macro_rules! __one_of {
     ($l_i:ident: $left:expr, $r_i:ident: $right:expr, $($rest:ident: $cond:expr),* $(,)?) => {
         |data: $crate::arch::Vector| -> $crate::arch::Vector {
-            // I had tried from the obvious shift conds into place and compute the
-            // hamming weight, perf degraded and less flexible. May be worth revisiting in the
-            // future. Yes, this approach is flawed and does not scale to large numbers of args
             #[allow(unused_unsafe)]
             unsafe {
                 let ($l_i, $r_i, $($rest),+) = ($left(data), $right(data), $($cond(data)),+);
-                // combine xor and nand to ensure only one cond held
+                // combine xor and nand to ensure only one cond held, this property is ensured for
+                // up to 4 conditions.
                 $crate::arch::and(
                     $crate::__xor!($l_i, $r_i, $($rest),+),
                     $crate::arch::not($crate::__all!($l_i, $r_i, $($rest),+))
@@ -666,13 +685,13 @@ macro_rules! __one_of {
 /// ```
 #[macro_export]
 macro_rules! one_of {
-    ($left:expr $(,)?) => {
-        $left
+    ($first:expr $(,)?) => {
+        $first
     };
-    ($left:expr, $right:expr $(,)?) => {
+    ($first:expr, $second:expr $(,)?) => {
         |data: $crate::arch::Vector| -> $crate::arch::Vector {
             #[allow(unused_unsafe)]
-            unsafe { $crate::__xor!($left(data), $right(data)) }
+            unsafe { $crate::__xor!($first(data), $second(data)) }
         }
     };
     ($first:expr, $second:expr, $third:expr $(,)?) => {
@@ -1139,7 +1158,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test))]
+#[cfg(test)]
 mod mirai_tests {
     use crate::{eq, for_all_ensure, for_all_ensure_ct, search};
 

@@ -1,3 +1,6 @@
+#![allow(clippy::let_and_return)] // the contracts require this and without the `verify` feature
+                                  // these bindings will cause warnings.
+
 use crate::arch::{self, byte_ptr, simd_ptr, Vector};
 
 cfg_verify!(
@@ -139,28 +142,23 @@ mod sealed {
     use super::*;
     cfg_verify!(use contracts::invariant;);
 
-    /// A representation of the scanning process.
-    pub struct Scanner;
-
-    impl Scanner {
-        /// Initiate the scanning process
-        ///
-        /// # Returns
-        ///
-        /// 0. The first `Vector` associated with `data` which most likely will not be included
-        ///    in the `AlignedIter`, so it must be operated on independently. This is to align the
-        ///    pointer, enabling aligned loads for a performance enhancement.
-        /// 1. The `AlignedIter` which will handle loading all data after the initial `Vector`
-        ///    (`0`).
-        #[cfg_attr(feature = "verify", contracts::requires(data.len() >= arch::WIDTH))]
-        #[inline(always)] #[must_use]
-        pub unsafe fn new(data: &[u8]) -> (Vector, AlignedIter) {
-            let (vector, aligned_ptr) = align_ptr_or_incr(data.as_ptr());
-            (
-                vector,
-                AlignedIter::after_first(aligned_ptr, data)
-            )
-        }
+    /// Initiate the scanning process
+    ///
+    /// # Returns
+    ///
+    /// 0. The first `Vector` associated with `data` which most likely will not be included
+    ///    in the `AlignedIter`, so it must be operated on independently. This is to align the
+    ///    pointer, enabling aligned loads for a performance enhancement.
+    /// 1. The `AlignedIter` which will handle loading all data after the initial `Vector`
+    ///    (`0`).
+    #[cfg_attr(feature = "verify", contracts::requires(data.len() >= arch::WIDTH))]
+    #[inline(always)] #[must_use]
+    pub unsafe fn init_scan(data: &[u8]) -> (Vector, AlignedIter) {
+        let (vector, aligned_ptr) = align_ptr_or_incr(data.as_ptr());
+        (
+            vector,
+            AlignedIter::after_first(aligned_ptr, data)
+        )
     }
 
     pub struct AlignedIter {
@@ -365,9 +363,9 @@ macro_rules! valid_len_then {
 #[cfg_attr(feature = "verify", contracts::ensures(ret.is_some() -> ret.unwrap() < data.len()))]
 #[inline(always)]
 pub unsafe fn search<F: Fn(Vector) -> Vector>(data: &[u8], cond: F) -> Option<usize> {
-    let (first, mut iter) = sealed::Scanner::new(data);
+    let (vector, mut iter) = sealed::init_scan(data);
 
-    let len = arch::MoveMask::new(cond(first)).trailing_zeros();
+    let len = arch::MoveMask::new(cond(vector)).trailing_zeros();
     if valid_len(len) { return Some(len as usize); }
 
     loop {
@@ -400,7 +398,7 @@ pub unsafe fn search<F: Fn(Vector) -> Vector>(data: &[u8], cond: F) -> Option<us
 #[cfg_attr(feature = "verify", contracts::requires(data.len() >= arch::WIDTH))]
 #[inline(always)]
 pub unsafe fn for_all_ensure_ct<F: Fn(Vector) -> Vector>(data: &[u8], cond: F, res: &mut bool) {
-    let (vector, mut iter) = sealed::Scanner::new(data);
+    let (vector, mut iter) = sealed::init_scan(data);
     *res &= crate::ensure!(vector, cond);
 
     loop {
@@ -425,7 +423,7 @@ pub unsafe fn for_all_ensure_ct<F: Fn(Vector) -> Vector>(data: &[u8], cond: F, r
 #[cfg_attr(feature = "verify", contracts::requires(data.len() >= arch::WIDTH))]
 #[inline(always)] #[must_use]
 pub unsafe fn for_all_ensure<F: Fn(Vector) -> Vector>(data: &[u8], cond: F) -> bool {
-    let (vector, mut iter) = sealed::Scanner::new(data);
+    let (vector, mut iter) = sealed::init_scan(data);
     if !crate::ensure!(vector, cond) { return false; }
 
     loop {

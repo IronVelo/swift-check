@@ -1,6 +1,6 @@
 # Swift Check
 
-Swift Check is a high-performance library designed for searching and validating data via expressive conditions.
+Swift Check is a robust high-performance library designed for searching and validating data via expressive conditions.
 
 ### Supported Acceleration
 
@@ -14,7 +14,7 @@ Add Swift Check to your project by including it in your Cargo.toml:
 
 ```toml
 [dependencies]
-swift-check = "0.1.5"
+swift-check = "0.1.6"
 ```
 
 ### Quick Start
