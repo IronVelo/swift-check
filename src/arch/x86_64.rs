@@ -8,17 +8,14 @@ use core::arch::x86_64::{
     _mm_or_si128, _mm_set1_epi8, _mm_xor_si128, _mm_setzero_si128
 };
 
-#[allow(unused_imports)]
-use mirai_annotations::{checked_precondition, precondition};
-
 cfg_runtime!(
     use core::arch::x86_64::{
         _mm_movemask_epi8, _mm_loadu_si128,
     };
 );
 
-
 cfg_verify!(
+    use mirai_annotations::{checked_precondition};
     // foreign specifications
     fn _mm_movemask_epi8(_input: Vector) -> i32  {
         mirai_annotations::result!()
@@ -101,17 +98,15 @@ pub unsafe fn load_unchecked(ptr: *const Ptr) -> Vector {
 /// # Safety
 ///
 /// The pointer must be aligned to the register width.
-#[contracts::requires(is_aligned(ptr))]
+#[cfg_attr(feature = "verify", contracts::requires(is_aligned(ptr)))]
 #[inline(always)] #[must_use]
 pub unsafe fn load_aligned(ptr: *const Ptr) -> Vector {
     _mm_load_si128(ptr)
 }
 
 #[inline(always)] #[must_use]
-pub fn load(data: &[u8; 16]) -> Vector {
-    let ptr = data.as_ptr();
+pub unsafe fn maybe_aligned_load(ptr: *const u8) -> Vector {
     if ptr.align_offset(super::WIDTH) == 0 {
-        // We just checked the alignment of the pointer
         unsafe { load_aligned(simd_ptr(ptr)) }
     } else {
         unsafe { load_unchecked(simd_ptr(ptr)) }
@@ -119,14 +114,39 @@ pub fn load(data: &[u8; 16]) -> Vector {
 }
 
 #[inline(always)] #[must_use]
-pub const fn byte_ptr(ptr: *const Ptr) -> *const u8 {
-    ptr.cast()
+pub fn load(data: &[u8; super::WIDTH]) -> Vector {
+    // SAFETY: the WIDTH is ensured by the type
+    unsafe { maybe_aligned_load(data.as_ptr()) }
 }
 
-#[inline(always)] #[must_use]
-pub const fn simd_ptr(ptr: *const u8) -> *const Ptr {
-    ptr.cast()
-}
+cfg_runtime!(
+    #[inline(always)] #[must_use]
+    pub const fn byte_ptr(ptr: *const Ptr) -> *const u8 {
+        ptr.cast()
+    }
+
+    #[inline(always)] #[must_use]
+    pub const fn simd_ptr(ptr: *const u8) -> *const Ptr {
+        ptr.cast()
+    }
+);
+
+cfg_verify!(
+    #[inline(always)] #[must_use]
+    pub fn byte_ptr(ptr: *const Ptr) -> *const u8 {
+        let ret = ptr.cast();
+        contract!(postcondition!(simd_ptr(ret) == ptr));
+        ret
+    }
+
+    #[inline(always)] #[must_use]
+    pub fn simd_ptr(ptr: *const u8) -> *const Ptr {
+        let ret = ptr.cast();
+        contract!(postcondition!(byte_ptr(ret) == ptr));
+        ret
+    }
+);
+
 
 #[cfg(not(target_feature = "sse4.1"))]
 macro_rules! set_sse_lane {

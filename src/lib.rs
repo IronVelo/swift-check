@@ -27,8 +27,8 @@
 //! assert_eq!(first_space2, first_space);
 //! ```
 #![allow(unused_unsafe, unused_parens)] // fallback
-// #![cfg_attr(not(test), no_std)]
-// #![cfg_attr(not(test), no_builtins)]
+#![cfg_attr(not(any(test, mirai, feature = "verify")), no_std)]
+#![cfg_attr(not(any(test, mirai, feature = "verify")), no_builtins)]
 
 pub mod arch;
 use arch::Vector;
@@ -1149,6 +1149,9 @@ mod mirai_tests {
 
         let res = search(input, eq(b'h')).unwrap();
         assert_eq!(input[res], b'h');
+
+        let res = search(input, eq(input[16])).unwrap();
+        assert_eq!(input[res], input[16]);
 
         let res = for_all_ensure_ct(input, eq(b' '));
         assert!(!res);

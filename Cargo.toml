@@ -20,15 +20,12 @@ include = [
 simd = []
 ensure-simd = ["simd"]
 experimental = []
-verify = ["contracts/mirai_assertions"]
-default = [
-    "simd",
-    "contracts/disable_contracts"
-]
+verify = ["contracts", "mirai-annotations"]
+default = ["simd"]
 
 [dependencies]
-mirai-annotations = "1.12.0"
-contracts = { version = "0.6.2" }
+mirai-annotations = { version = "1.12.0", optional = true }
+contracts = { version = "0.6.2", features = ["mirai_assertions"], optional = true }
 
 [dev-dependencies]
 criterion = "0.5.1"

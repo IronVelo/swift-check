@@ -97,6 +97,9 @@ pub unsafe fn load_unchecked(data: *const Ptr) -> Vector {
 pub unsafe fn load_aligned(ptr: *const Ptr) -> Vector { load_unchecked(ptr) }
 
 #[inline(always)] #[must_use]
+pub unsafe fn maybe_aligned_load(ptr: *const u8) -> Vector { load_unchecked(ptr) }
+
+#[inline(always)] #[must_use]
 pub fn load(data: &[u8; 16]) -> Vector { unsafe { load_unchecked(data.as_ptr()) } }
 
 #[inline(always)]

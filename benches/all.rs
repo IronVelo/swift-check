@@ -69,19 +69,6 @@ fn bench_aligned(c: &mut Criterion) {
     });
 }
 
-macro_rules! for_each_byte_std_fn {
-    ($name:ident => |$byte:ident| $cond:expr) => {
-        #[inline]
-        fn $name (input: &[u8]) -> bool {
-            let mut flag = true;
-            for $byte in input {
-                flag &= $cond;
-            }
-            flag
-        }
-    };
-}
-
 fn bench_multi(c: &mut Criterion) {
     let input = b"Hello world I am an input with the numbers at the end, for this bench my \
     length is divisible by                              016";
@@ -107,15 +94,6 @@ fn bench_multi(c: &mut Criterion) {
         b.iter(|| {
             let res = memchr::memchr3(b'0', b'1', b'6', black_box(input));
             black_box(res)
-        })
-    });
-
-    for_each_byte_std_fn!(in_range => |byte| matches!(byte, b'0'..=b'z'));
-
-    g.bench_function("std/ensure-range", |b| {
-        b.iter(|| {
-            let res = in_range(black_box(input));
-            black_box(res);
         })
     });
 

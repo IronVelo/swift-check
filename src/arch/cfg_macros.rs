@@ -79,7 +79,7 @@ macro_rules! cfg_simd {
 macro_rules! cfg_verify {
     ($($item:item)*) => {
         $(
-            #[cfg(feature = "verify")]
+            #[cfg(all(feature = "verify", mirai))]
             $item
         )*
     };
@@ -88,7 +88,7 @@ macro_rules! cfg_verify {
 macro_rules! cfg_runtime {
     ($($item:item)*) => {
         $(
-            #[cfg(not(feature = "verify"))]
+            #[cfg(not(all(feature = "verify", mirai)))]
             $item
         )*
     };

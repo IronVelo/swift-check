@@ -2,6 +2,7 @@ pub(crate) const WIDTH: usize = 16;
 #[macro_use]
 mod cfg_macros;
 
+// Basic predicate
 #[allow(dead_code)]
 pub(crate) fn is_aligned(ptr: *const Ptr) -> bool {
     byte_ptr(ptr).align_offset(WIDTH) == 0
@@ -12,12 +13,16 @@ cfg_verify!(
         ($kind:ident!($args:expr)) => {
             mirai_annotations::$kind!($args)
         };
+        ($expr:expr) => {
+            $expr
+        };
     }
 );
 
 cfg_runtime!(
     macro_rules! contract {
         ($kind:ident!($args:expr)) => {};
+        ($expr:expr) => {};
     }
 );
 
@@ -44,7 +49,7 @@ cfg_fallback!(
 
 #[doc(hidden)]
 pub use arch::{
-    eq, not, xor, or, and, splat, byte_ptr, simd_ptr, load_partial, load_aligned
+    eq, not, xor, or, and, splat, byte_ptr, simd_ptr, load_partial, load_aligned, maybe_aligned_load
 };
 
 #[doc(hidden)]

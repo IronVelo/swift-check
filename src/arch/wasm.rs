@@ -70,38 +70,16 @@ pub unsafe fn less_than(a: Vector, b: Vector) -> Vector { f32x4_lt(a, b) }
 #[inline(always)] #[must_use]
 pub unsafe fn splat(a: u8) -> Vector { i8x16_splat(a as i8) }
 
-#[must_use]
-pub unsafe fn hamming_weight(v: Vector) -> u32 {
-    // Constants for bit-count reduction
-    let mask1 = i8x16_splat(0x55); // 01010101
-    let mask2 = i8x16_splat(0x33); // 00110011
-    let mask4 = i8x16_splat(0x0F); // 00001111
-
-    // Perform parallel bit count reduction
-    let mut tmp = v128_and(v, mask1);
-    tmp = v128_add(tmp, v128_and(v128_shr_u8(v, 1), mask1));
-    tmp = v128_and(tmp, mask2);
-    tmp = v128_add(tmp, v128_and(v128_shr_u8(tmp, 2), mask2));
-    tmp = v128_and(tmp, mask4);
-    tmp = v128_add(tmp, v128_shr_u8(tmp, 4));
-    // Now each byte of tmp contains the number of bits set in the corresponding byte of the
-    // original vector
-
-    // Sum all bytes to get the total number of set bits
-    // Horizontal add and extract the final sum, adjust the operations as per available intrinsics
-    let sums = i8x16_shl(tmp, 4); // Shift to position for addition
-    let result = i8x16_add(sums, tmp); // Horizontal add
-
-    // Extract the sum from the first lane
-    let scalar_sum = i8x16_extract_lane::<0>(result) as u32;
-
-    scalar_sum
-}
-
 #[inline(always)] #[must_use]
 pub unsafe fn load_unchecked(data: *const Ptr) -> Vector {
     v128_load(data)
 }
+
+#[inline(always)] #[must_use]
+pub unsafe fn load_aligned(ptr: *const Ptr) -> Vector { load_unchecked(ptr) }
+
+#[inline(always)] #[must_use]
+pub unsafe fn maybe_aligned_load(ptr: *const u8) -> Vector { load_unchecked(ptr) }
 
 #[inline(always)] #[must_use]
 pub fn load(data: &[u8; 16]) -> Vector {
@@ -110,7 +88,7 @@ pub fn load(data: &[u8; 16]) -> Vector {
         // WebAssembly handles alignment at the virtual machine level,
         // so manually checking alignment and choosing between aligned
         // and unaligned loads is typically not necessary.
-        load_unchecked(data.as_ptr().cast())
+        load_unchecked(simd_ptr(data.as_ptr()))
     }
 }
 
