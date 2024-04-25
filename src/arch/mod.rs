@@ -2,6 +2,9 @@ pub(crate) const WIDTH: usize = 16;
 #[macro_use]
 mod cfg_macros;
 
+#[cfg(all(mirai, not(feature = "verify")))]
+compile_error!("To run mirai on `swift-check` you must enable the `verify` feature");
+
 // Basic predicate
 #[allow(dead_code)]
 pub(crate) fn is_aligned(ptr: *const Ptr) -> bool {
