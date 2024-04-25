@@ -3,15 +3,15 @@ pub(crate) const WIDTH: usize = 16;
 mod cfg_macros;
 
 #[cfg(all(mirai, not(feature = "verify")))]
-compile_error!("To run mirai on `swift-check` you must enable the `verify` feature");
-
-// Basic predicate
-#[allow(dead_code)]
-pub(crate) fn is_aligned(ptr: *const Ptr) -> bool {
-    byte_ptr(ptr).align_offset(WIDTH) == 0
-}
+compile_error!(
+    "To run mirai on `swift-check` you must enable the `verify` feature: \n\
+     `cargo mirai --tests --features verify`"
+);
 
 cfg_verify!(
+    pub(crate) fn is_aligned(ptr: *const Ptr) -> bool {
+        byte_ptr(ptr).align_offset(WIDTH) == 0
+    }
     macro_rules! contract {
         ($kind:ident!($args:expr)) => {
             mirai_annotations::$kind!($args)

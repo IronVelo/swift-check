@@ -1,6 +1,4 @@
 #![allow(clippy::missing_safety_doc)]
-#[allow(unused_imports)]
-use crate::arch::is_aligned;
 
 use core::arch::x86_64::{
     __m128i,
@@ -15,8 +13,10 @@ cfg_runtime!(
 );
 
 cfg_verify!(
+    use crate::arch::is_aligned;
     use mirai_annotations::{checked_precondition};
-    // foreign specifications
+
+    // foreign specifications, these are pure, so we only have to inform `mirai` of their existence.
     fn _mm_movemask_epi8(_input: Vector) -> i32  {
         mirai_annotations::result!()
     }
