@@ -27,10 +27,15 @@
 //! assert_eq!(first_space2, first_space);
 //! ```
 #![allow(unused_unsafe, unused_parens)] // fallback
-#![cfg_attr(not(any(test, mirai, feature = "verify")), no_std)]
+#![cfg_attr(not(any(test, mirai, feature = "verify", feature = "std")), no_std)]
 #![cfg_attr(not(any(test, mirai, feature = "verify")), no_builtins)]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 pub mod arch;
+
+#[cfg(feature = "require")]
+pub mod require;
+
 use arch::Vector;
 
 /// Check that the condition holds for all bytes

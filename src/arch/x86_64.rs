@@ -40,22 +40,23 @@ impl MoveMask {
     pub unsafe fn new(input: Vector) -> Self {
         Self(_mm_movemask_epi8(input) as u32)
     }
-
     #[inline(always)] #[must_use]
     pub const fn all_bits_set(&self) -> bool {
         self.0 == 0xFFFF
     }
-
+    #[inline(always)] #[must_use]
+    pub const fn any_bit_set(&self) -> bool { self.0 > 0 }
     #[inline(always)] #[must_use]
     pub const fn trailing_zeros(&self) -> u32 {
         self.0.trailing_zeros()
     }
-
     #[inline(always)] #[must_use]
     pub const fn trailing_ones(&self) -> u32 {
         self.0.trailing_ones()
     }
 }
+
+impl_bit_ops!(MoveMask);
 
 #[inline(always)] #[must_use]
 pub unsafe fn eq(a: Vector, b: Vector) -> Vector { _mm_cmpeq_epi8(a, b) }

@@ -443,3 +443,29 @@ pub unsafe fn for_all_ensure<F: Fn(Vector) -> Vector>(data: &[u8], cond: F) -> b
         }
     }
 }
+
+#[cfg(feature = "require")]
+#[cfg_attr(feature = "verify", contracts::requires(data.len() >= arch::WIDTH))]
+#[inline(always)]
+pub unsafe fn ensure_requirements<R: crate::require::Requirement>(data: &[u8], mut req: R) -> R {
+    let (vector, mut iter) = sealed::init_scan(data);
+    req.check(vector);
+
+    loop {
+        match iter.next() {
+            sealed::Pointer::Aligned((vector, _)) => {
+                check_end_ptr!(iter.end, data);
+                req.check(vector);
+            },
+            sealed::Pointer::End(Some((vector, _))) => {
+                check_end_ptr!(iter.end, data);
+                req.check(vector);
+                break req;
+            },
+            sealed::Pointer::End(None) => {
+                check_end_ptr!(iter.end, data);
+                break req;
+            }
+        }
+    }
+}

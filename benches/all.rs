@@ -1,7 +1,8 @@
 use swift_check::{any, arch::load, eq, ensure, range, find, for_all_ensure, search, for_all_ensure_ct, one_of};
 use criterion::{Criterion, Throughput, criterion_group, criterion_main, black_box};
 use swift_check::not;
-
+use swift_check::require::check;
+use swift_check::{requirement, requirements};
 
 fn bench_aligned(c: &mut Criterion) {
     let inp = b"hello world 1234";
@@ -156,6 +157,11 @@ fn bench_partial(c: &mut Criterion) {
     });
 }
 
+requirement!(uppercase => range!(b'A'..=b'Z') =>! "needs uppercase!");
+requirement!(lowercase => range!(b'a'..=b'z') =>! "needs lowercase!");
+requirement!(numeric => range!(b'0'..=b'9') =>! "needs number!");
+requirement!(question_mark => eq(b'?') =>! "needs a question mark!");
+
 fn bench_massive(c: &mut Criterion) {
     let mut input = [0u8; 524288];
 
@@ -163,6 +169,8 @@ fn bench_massive(c: &mut Criterion) {
     g.throughput(Throughput::Bytes(input.len() as u64));
 
     input[input.len() - 1] = b'5';
+
+
 
     g.bench_function("find-num-at-end", |b| {
         b.iter(|| {
@@ -215,7 +223,17 @@ fn bench_massive(c: &mut Criterion) {
             assert!(res);
         })
     });
+
+    g.bench_function("complex-requirements-experimental", |b| {
+        b.iter(|| {
+            let res = check(
+                black_box(&input),
+                requirements!([uppercase, lowercase, numeric, question_mark])
+            );
+            black_box(res);
+        })
+    });
 }
 
-criterion_group!(benches, bench_multi, bench_remainder, bench_massive, bench_partial, bench_aligned);
+criterion_group!(benches, bench_massive, bench_multi, bench_remainder, bench_partial, bench_aligned);
 criterion_main!(benches);

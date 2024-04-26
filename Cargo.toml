@@ -20,6 +20,8 @@ include = [
 simd = []
 ensure-simd = ["simd"]
 experimental = []
+require = []
+std = []
 verify = ["contracts", "mirai-annotations"]
 default = ["simd"]
 

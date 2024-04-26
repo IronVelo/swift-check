@@ -8,6 +8,28 @@ compile_error!(
      `cargo mirai --tests --features verify`"
 );
 
+macro_rules! impl_bit_ops {
+    ($ident:ident) => {
+        impl core::ops::BitAnd for $ident {
+            type Output = Self;
+
+            #[inline(always)]
+            fn bitand(self, rhs: Self) -> Self::Output {
+                $ident(self.0 & rhs.0)
+            }
+        }
+
+        impl core::ops::BitOr for $ident {
+            type Output = Self;
+
+            #[inline(always)]
+            fn bitor(self, rhs: Self) -> Self::Output {
+                $ident(self.0 | rhs.0)
+            }
+        }
+    };
+}
+
 cfg_verify!(
     pub(crate) fn is_aligned(ptr: *const Ptr) -> bool {
         byte_ptr(ptr).align_offset(WIDTH) == 0
