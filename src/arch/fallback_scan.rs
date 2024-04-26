@@ -54,3 +54,15 @@ pub unsafe fn search(data: &[u8], cond: impl Fn(Vector) -> Vector) -> Option<usi
             .map(|pos| pos as usize + idx); or None
     )
 }
+
+#[cfg(feature = "require")]
+#[inline(always)]
+pub unsafe fn ensure_requirements<R: crate::require::Requirement>(data: &[u8], mut req: R) -> R {
+    let mut idx = 0;
+    scan_all!(
+        data, idx,
+        |chunk| => req.check(super::load_unchecked(chunk)),
+        |partial| => req.check(super::load_unchecked(partial)); or {}
+    );
+    req
+}
