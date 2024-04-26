@@ -28,17 +28,19 @@ impl MoveMask {
     pub const fn all_bits_set(&self) -> bool {
         self.0 == 0x8888888888888888
     }
-
+    #[inline(always)] #[must_use]
+    pub const fn any_bit_set(&self) -> bool { self.0 > 0 }
     #[inline(always)] #[must_use]
     pub const fn trailing_zeros(&self) -> u32 {
         self.0.trailing_zeros()
     }
-
     #[inline(always)] #[must_use]
     pub const fn trailing_ones(&self) -> u32 {
         self.0.trailing_ones()
     }
 }
+
+impl_bit_ops!(MoveMask);
 
 #[inline(always)] #[must_use]
 pub unsafe fn eq(a: Vector, b: Vector) -> Vector { u8x16_eq(a, b) }

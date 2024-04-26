@@ -26,23 +26,21 @@ impl MoveMask {
 
         Self(scalar64)
     }
-
-    // Check if all the high bits are set
     #[inline(always)] #[must_use]
-    pub const fn all_bits_set(&self) -> bool {
-        self.0 == 0xFFFF_FFFF_FFFF_FFFF
-    }
-
+    pub const fn all_bits_set(&self) -> bool { self.0 == 0xFFFF_FFFF_FFFF_FFFF }
+    #[inline(always)] #[must_use]
+    pub const fn any_bit_set(&self) -> bool { self.0 > 0 }
     #[inline(always)] #[must_use]
     pub const fn trailing_zeros(&self) -> u32 {
         self.0.trailing_zeros() >> 2
     }
-
     #[inline(always)] #[must_use]
     pub const fn trailing_ones(&self) -> u32 {
         self.0.trailing_ones() >> 2
     }
 }
+
+impl_bit_ops!(MoveMask);
 
 #[inline(always)] #[must_use]
 pub unsafe fn eq(a: Vector, b: Vector) -> Vector {

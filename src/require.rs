@@ -385,7 +385,7 @@ macro_rules! requirement {
 ///
 /// let (valid, res) = check(
 ///     b"example input 7",
-///     [space, seven]
+///     requirements!([space, seven])
 /// ).results();
 ///
 /// // The first element of result denotes if all bytes met at least one of the conditions, in this
@@ -495,7 +495,7 @@ macro_rules! requirements {
 ///
 /// let (valid, res) = check(
 ///     b"example input 7",
-///     [space, seven]
+///     requirements!([space, seven])
 /// ).results();
 ///
 /// // The first element of result denotes if all bytes met at least one of the conditions, in this
