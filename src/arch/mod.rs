@@ -1,4 +1,4 @@
-pub(crate) const WIDTH: usize = 16;
+pub const WIDTH: usize = 16;
 #[macro_use]
 mod cfg_macros;
 
